@@ -12,20 +12,49 @@ st.sidebar.title("Sentiment analysis of Tweets about US Airlines")
 st.markdown("This application is a Streamlit dashboard to analyze the sentiment of Tweets🐦")
 st.sidebar.markdown("This application is a Streamlit dashboard to analyze the sentiment of Tweets🐦")
 
-PATH = ("/home/rhyme/Desktop/Project/Tweets.csv")
+PATH = "Tweets.csv"
 
 @st.cache(persist=True)
-def load_data():
-    data = pd.read_csv(PATH)
+def load_data(path):
+    data = pd.read_csv(path)
     data['tweet_created'] = pd.to_datetime(data['tweet_created'])
     return data
 
-data =  load_data()
+def get_export_column(source, names, default):
+    for name in names:
+        if name in source.columns:
+            return source[name].fillna(default)
+    return pd.Series([default] * len(source), index=source.index)
+
+def load_xquik_export(uploaded_file):
+    source = pd.read_csv(uploaded_file)
+    data = pd.DataFrame()
+    data['airline_sentiment'] = get_export_column(source, ['airline_sentiment', 'sentiment'], 'neutral').astype(str).str.lower()
+    data['airline_sentiment_confidence'] = get_export_column(source, ['airline_sentiment_confidence', 'sentiment_confidence'], 1)
+    data['negativereason'] = get_export_column(source, ['negativereason', 'negative_reason'], '')
+    data['negativereason_confidence'] = get_export_column(source, ['negativereason_confidence', 'negative_reason_confidence'], '')
+    data['airline'] = get_export_column(source, ['airline', 'brand', 'query'], 'Xquik export')
+    data['name'] = get_export_column(source, ['name', 'username', 'screen_name', 'user'], '')
+    data['retweet_count'] = get_export_column(source, ['retweet_count', 'retweets', 'nretweets'], 0)
+    data['text'] = get_export_column(source, ['text', 'tweet', 'full_text', 'content'], '')
+    data['tweet_created'] = pd.to_datetime(get_export_column(source, ['tweet_created', 'created_at', 'date', 'timestamp'], ''), errors='coerce')
+    data['latitude'] = pd.to_numeric(get_export_column(source, ['latitude', 'lat'], np.nan), errors='coerce')
+    data['longitude'] = pd.to_numeric(get_export_column(source, ['longitude', 'lon', 'lng'], np.nan), errors='coerce')
+    data['tweet_id'] = get_export_column(source, ['tweet_id', 'id', 'id_str'], '')
+    data = data.dropna(subset=['tweet_created'])
+    return data
+
+uploaded_file = st.sidebar.file_uploader("Upload Xquik CSV export", type=["csv"])
+data = load_xquik_export(uploaded_file) if uploaded_file is not None else load_data(PATH)
 
 #st.write(data)
 st.sidebar.subheader("Show random tweet")
 random_tweet = st.sidebar.radio('Sentiment',('positive', 'neutral', 'negative'))
-st.sidebar.markdown(data.query('airline_sentiment == @random_tweet')[['text']].sample(n=1).iat[0,0])
+random_tweet_data = data.query('airline_sentiment == @random_tweet')[['text']]
+if random_tweet_data.empty:
+    st.sidebar.info("No tweets available for this sentiment.")
+else:
+    st.sidebar.markdown(random_tweet_data.sample(n=1).iat[0,0])
 
 st.sidebar.markdown('### Number of tweets by sentiment')
 select = st.sidebar.selectbox('Visualization type', ['Histogram', 'Pie chart'], key='1')
@@ -55,7 +84,7 @@ if not st.sidebar.checkbox("Close", True, key='1'):
         st.write(modified_data)
 
 st.sidebar.subheader("Breakdown Airline tweets by sentiment")
-choice = st.sidebar.multiselect('Pick airlines', ('US airway', 'United', 'American', 'Southwest', 'Delta', 'Virgin America'),key='0')
+choice = st.sidebar.multiselect('Pick airlines', ('US Airways', 'United', 'American', 'Southwest', 'Delta', 'Virgin America', 'Xquik export'),key='0')
 
 if len(choice) > 0:
     choice_data = data[data.airline.isin(choice)]
